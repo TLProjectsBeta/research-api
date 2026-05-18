@@ -1,8 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.runnables import RunnablePassthrough
+from langchain_groq import ChatGroq
 from app.config import get_settings
 
 settings = get_settings()
@@ -32,8 +30,6 @@ RESEARCH_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "Research topic: {topic}\n\nFocus area (optional): {focus}")
 ])
 
-from langchain_groq import ChatGroq
-
 def get_llm():
     return ChatGroq(
         model="llama-3.3-70b-versatile",
@@ -42,7 +38,6 @@ def get_llm():
         groq_api_key=settings.groq_api_key
     )
 
-# The main runnable — LangServe exposes this
 research_chain = (
     RESEARCH_PROMPT
     | get_llm()
