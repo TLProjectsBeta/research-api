@@ -1,9 +1,8 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 from langserve import add_routes
 
 from app.config import get_settings
@@ -15,7 +14,6 @@ from app.routers import health
 
 settings = get_settings()
 
-# Set LangSmith env vars before anything else
 if settings.langchain_api_key:
     os.environ["LANGCHAIN_TRACING_V2"] = settings.langchain_tracing_v2
     os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
@@ -46,8 +44,7 @@ app.add_middleware(
 # Health routes — no auth required
 app.include_router(health.router)
 
-# ── LangServe Routes ──────────────────────────────────────
-# Registers: /research/invoke, /stream, /batch, /playground, /input_schema
+# ── LangServe Route — Research ─────────────────────────────
 add_routes(
     app,
     research_chain,
@@ -56,21 +53,47 @@ add_routes(
     enabled_endpoints=["invoke", "stream", "batch", "playground", "input_schema"]
 )
 
-# Registers: /chat/invoke, /stream, /playground
-from fastapi import Request
-from langchain_core.messages import HumanMessage
-
+# ── Manual Route — Chat (RunnableWithMessageHistory not LangServe compatible) ──
 @app.post("/chat/invoke", dependencies=[Depends(verify_api_key)])
 async def chat_invoke(request: Request):
-    body = await request.json()
-    question = body["input"]["question"]
-    session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
-    
-    response = await chat_chain.ainvoke(
-        {"question": question},
-        config={"configurable": {"session_id": session_id}}
-    )
-    return {"output": response}
+    try:
+        body = await request.json()
+        question = body["input"]["question"]
+        session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
+
+        response = await chat_chain.ainvoke(
+            {"question": question},
+            config={"configurable": {"session_id": session_id}}
+        )
+        return {"output": response, "session_id": session_id}
+    except KeyError:
+        return JSONResponse(
+            status_code=422,
+            content={"error": "Missing required field: input.question"}
+        )
+    except Exception as e:
+        logger.error("Chat invoke error", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.post("/chat/stream", dependencies=[Depends(verify_api_key)])
+async def chat_stream(request: Request):
+    from fastapi.responses import StreamingResponse
+
+    async def generate():
+        body = await request.json()
+        question = body["input"]["question"]
+        session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
+
+        async for chunk in chat_chain.astream(
+            {"question": question},
+            config={"configurable": {"session_id": session_id}}
+        ):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/plain")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
