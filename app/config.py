@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
     api_keys: list[str] = []
+    groq_api_key: str = ""
 
     # Redis
     redis_url: str = "redis://localhost:6379"

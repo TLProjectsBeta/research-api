@@ -32,21 +32,14 @@ RESEARCH_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "Research topic: {topic}\n\nFocus area (optional): {focus}")
 ])
 
+from langchain_groq import ChatGroq
+
 def get_llm():
-    """Return LLM based on config. Swap models by changing .env, not code."""
-    if settings.google_api_key:
-        return ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            temperature=settings.temperature,
-            max_output_tokens=settings.max_tokens,
-            google_api_key=settings.google_api_key
-        )
-    return ChatOpenAI(
-        model=settings.model_name,
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
         temperature=settings.temperature,
         max_tokens=settings.max_tokens,
-        openai_api_key=settings.openai_api_key,
-        streaming=True
+        groq_api_key=settings.groq_api_key
     )
 
 # The main runnable — LangServe exposes this
