@@ -12,6 +12,20 @@ from app.chains.history import chat_chain
 from app.middleware.auth import verify_api_key
 from app.routers import health
 
+from pydantic import BaseModel
+from typing import Optional
+
+class ChatInput(BaseModel):
+    question: str
+
+class ChatConfig(BaseModel):
+    session_id: str = "default"
+
+class ChatRequest(BaseModel):
+    input: ChatInput
+    config: Optional[dict] = {}
+    kwargs: Optional[dict] = {}
+
 settings = get_settings()
 
 if settings.langchain_api_key:
@@ -55,22 +69,16 @@ add_routes(
 
 # ── Manual Route — Chat (RunnableWithMessageHistory not LangServe compatible) ──
 @app.post("/chat/invoke", dependencies=[Depends(verify_api_key)])
-async def chat_invoke(request: Request):
+async def chat_invoke(request: ChatRequest):
     try:
-        body = await request.json()
-        question = body["input"]["question"]
-        session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
+        question = request.input.question
+        session_id = request.config.get("configurable", {}).get("session_id", "default")
 
         response = await chat_chain.ainvoke(
             {"question": question},
             config={"configurable": {"session_id": session_id}}
         )
         return {"output": response, "session_id": session_id}
-    except KeyError:
-        return JSONResponse(
-            status_code=422,
-            content={"error": "Missing required field: input.question"}
-        )
     except Exception as e:
         logger.error("Chat invoke error", error=str(e))
         return JSONResponse(
@@ -79,14 +87,13 @@ async def chat_invoke(request: Request):
         )
 
 @app.post("/chat/stream", dependencies=[Depends(verify_api_key)])
-async def chat_stream(request: Request):
+async def chat_stream(request: ChatRequest):
     from fastapi.responses import StreamingResponse
 
-    async def generate():
-        body = await request.json()
-        question = body["input"]["question"]
-        session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
+    question = request.input.question
+    session_id = request.config.get("configurable", {}).get("session_id", "default")
 
+    async def generate():
         async for chunk in chat_chain.astream(
             {"question": question},
             config={"configurable": {"session_id": session_id}}
