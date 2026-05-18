@@ -22,3 +22,9 @@ def get_redis_history(session_id: str) -> RedisChatMessageHistory:
         ttl=86400  # 24 hours TTL — old sessions auto-cleaned
     )
 
+chat_chain = RunnableWithMessageHistory(
+    base_chain,
+    get_redis_history,
+    input_messages_key="question",
+    history_messages_key="history"
+)
