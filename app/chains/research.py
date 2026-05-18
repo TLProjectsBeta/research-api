@@ -36,7 +36,7 @@ def get_llm():
     """Return LLM based on config. Swap models by changing .env, not code."""
     if settings.google_api_key:
         return ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             temperature=settings.temperature,
             max_output_tokens=settings.max_tokens,
             google_api_key=settings.google_api_key
