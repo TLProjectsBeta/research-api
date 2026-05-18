@@ -57,13 +57,20 @@ add_routes(
 )
 
 # Registers: /chat/invoke, /stream, /playground
-add_routes(
-    app,
-    chat_chain,
-    path="/chat",
-    dependencies=[Depends(verify_api_key)],
-    enabled_endpoints=["invoke", "stream", "playground"]
-)
+from fastapi import Request
+from langchain_core.messages import HumanMessage
+
+@app.post("/chat/invoke", dependencies=[Depends(verify_api_key)])
+async def chat_invoke(request: Request):
+    body = await request.json()
+    question = body["input"]["question"]
+    session_id = body.get("config", {}).get("configurable", {}).get("session_id", "default")
+    
+    response = await chat_chain.ainvoke(
+        {"question": question},
+        config={"configurable": {"session_id": session_id}}
+    )
+    return {"output": response}
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
