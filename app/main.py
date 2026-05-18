@@ -68,24 +68,34 @@ add_routes(
 )
 
 # ── Manual Route — Chat (RunnableWithMessageHistory not LangServe compatible) ──
+import asyncio
+
 @app.post("/chat/invoke", dependencies=[Depends(verify_api_key)])
 async def chat_invoke(request: ChatRequest):
     try:
         question = request.input.question
         session_id = request.config.get("configurable", {}).get("session_id", "default")
 
-        response = await chat_chain.ainvoke(
-            {"question": question},
-            config={"configurable": {"session_id": session_id}}
+        response = await asyncio.wait_for(
+            chat_chain.ainvoke(
+                {"question": question},
+                config={"configurable": {"session_id": session_id}}
+            ),
+            timeout=25.0  # fail fast before Render closes connection
         )
         return {"output": response, "session_id": session_id}
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={"error": "Request timed out. Try a shorter question."}
+        )
     except Exception as e:
         logger.error("Chat invoke error", error=str(e))
         return JSONResponse(
             status_code=500,
             content={"error": str(e)}
         )
-
+    
 @app.post("/chat/stream", dependencies=[Depends(verify_api_key)])
 async def chat_stream(request: ChatRequest):
     from fastapi.responses import StreamingResponse
